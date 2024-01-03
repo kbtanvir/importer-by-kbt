@@ -81,6 +81,9 @@ function csv_importer_admin_page()
                             .then(response => {
                                 // Assuming the server responds with the totalRows
                                 this.totalRows = response.data.data.totalRows;
+                                this.totalRows = this.totalRows - 2
+
+
                                 this.limitItems = this.totalRows
 
                                 // Show the back button and update currentStep
@@ -101,6 +104,32 @@ function csv_importer_admin_page()
                 startImport: function () {
                     // Implement the import logic based on the limitItems
                     // Update importStatus and logs as individual items are updated
+
+                    // Placeholder for post update logic
+                    // Replace this with your actual logic for updating a post by ID
+                    const updatePostById = (id) => {
+                        // Your update logic here
+                        // Example: Use wp_update_post or any custom update function
+                    };
+
+                    for (let id = 1; id <= this.limitItems; id++) {
+                        // Log processing of each item
+                        this.logs.push({ id: id, message: `Processing {id, name}` });
+
+                        // Placeholder for post update logic
+                        // Replace this with your actual logic for updating a post by ID
+                        // For now, simulate a successful update if the ID is even, otherwise, simulate post not found
+                        if (id % 2 === 0) {
+                            this.logs.push({ id: id, message: 'Update successful' });
+                            // Uncomment and replace with your actual update logic
+                            // updatePostById(id);
+                        } else {
+                            this.logs.push({ id: id, message: 'Post not found' });
+                        }
+                    }
+
+                    // Update importStatus to Completed
+                    this.importStatus = 'Completed';
                 },
                 submitForm: async function () {
                     // Handle form submission if needed
