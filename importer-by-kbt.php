@@ -44,10 +44,9 @@ function csv_importer_admin_page()
         </form>
 
         <div id="status-update">
-            <p>Total Rows: {{ totalRows }}</p>
             <p>Status: {{ importStatus }}</p>
             <div id="log-container">
-                <div v-for="log in logs" :key="log.id">{{ log.message }}</div>
+                <b v-for="log in logs" :key="log.id">{{ log.message }}</b>
             </div>
         </div>
     </div>
@@ -63,8 +62,7 @@ function csv_importer_admin_page()
                 limitItems: 0,
             },
             methods: {
-                uploadFile: function () {
-                    // Implement the file upload logic
+                uploadFile: function () {  // Implement the file upload logic
 
                     // Get the input element for file upload
                     const fileInput = document.querySelector('input[name="csv_file"]');
@@ -82,20 +80,8 @@ function csv_importer_admin_page()
                         axios.post(csv_importer_data.ajaxurl, formData)
                             .then(response => {
                                 // Assuming the server responds with the totalRows
-                                const csvData = response.data.data.csvData;
-
-                                // Parse the CSV data to count only valid rows
-                                const rows = csvData.split('\n');
-                                let validRows = 0;
-
-                                for (const row of rows) {
-                                    // Ignore empty rows and the header row
-                                    if (row.trim() !== '' && !row.includes('header_keyword')) {
-                                        validRows++;
-                                    }
-                                }
-
-                                this.totalRows = validRows;
+                                this.totalRows = response.data.data.totalRows;
+                                this.limitItems = this.totalRows
 
                                 // Show the back button and update currentStep
                                 this.currentStep = 2;
@@ -112,7 +98,6 @@ function csv_importer_admin_page()
                         console.error('No file selected.');
                     }
                 },
-
                 startImport: function () {
                     // Implement the import logic based on the limitItems
                     // Update importStatus and logs as individual items are updated
