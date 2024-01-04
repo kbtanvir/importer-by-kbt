@@ -2,23 +2,21 @@
 /*
 Plugin Name: Importer by KBT
 Description: A WordPress plugin for importing posts from a CSV file
-Version: 1.1
+Version: 1.4
 Author: K. B. Tanvir
 */
 
-function enqueue_csv_importer_script()
+function add_scripts()
 {
-    wp_enqueue_script('vue-js', 'https://cdn.jsdelivr.net/npm/vue@2.6.14', array(), '2.6.14', false);
-    wp_enqueue_script('axios', 'https://cdn.jsdelivr.net/npm/axios@0.21.1', array('jquery'), '0.21.1', true);
+    wp_enqueue_script('vue-js', 'https://cdn.jsdelivr.net/npm/vue@3.2.20', array(), '3.2.20', false);
 
-    // Pass the ajaxurl and nonce to the script
-    wp_localize_script('axios', 'csv_importer_data', array(
-        'ajaxurl' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('csv_import_nonce')
+    wp_localize_script('jquery', 'ajax', array(
+        'url' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('csv_import_nonce'),
     ));
 }
 
-add_action('admin_enqueue_scripts', 'enqueue_csv_importer_script');
+add_action('admin_enqueue_scripts', 'add_scripts');
 
 function csv_importer_admin_page()
 {
@@ -31,7 +29,7 @@ function csv_importer_admin_page()
 
             <div v-if="currentStep === 1">
                 <input type="file" name="csv_file" accept=".csv" />
-                <button type="button" class="button-primary" @click="uploadFile">Upload</button>
+                <button type="button" class="button-primary upload" @click="uploadFile">Upload</button>
             </div>
 
             <div v-if="currentStep === 2">
@@ -51,132 +49,115 @@ function csv_importer_admin_page()
         </div>
     </div>
 
+
     <script>
-        var csvImporterApp = new Vue({
-            el: '#csv-importer-app',
-            data: {
-                currentStep: 1,
-                totalRows: 0,
-                importStatus: 'Idle',
-                logs: [],
-                limitItems: 0,
+        const { createApp, ref } = Vue;
+
+        const csvImporterApp = createApp({
+            data() {
+                return {
+                    currentStep: 1,
+                    totalRows: 0,
+                    importStatus: 'Idle',
+                    logs: [],
+                    limitItems: 0,
+                    csvData: []
+                };
             },
             methods: {
-                uploadFile: function () {  // Implement the file upload logic
-
-                    // Get the input element for file upload
+                uploadFile() {
                     const fileInput = document.querySelector('input[name="csv_file"]');
 
-                    // Check if a file is selected
                     if (fileInput.files.length > 0) {
-                        const formData = new FormData();
-                        formData.append('action', 'process_csv_file');
-                        formData.append('csv_import_nonce', csv_importer_data.nonce);
-                        formData.append('csv_file', fileInput.files[0]);
-
-                        // Show loading or processing indicator if needed
-
-                        // Send an AJAX request to process the CSV file
-                        axios.post(csv_importer_data.ajaxurl, formData)
-                            .then(response => {
-                                // Assuming the server responds with the totalRows
-                                this.totalRows = response.data.data.totalRows;
-                                this.totalRows = this.totalRows - 2
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const csvContent = e.target.result;
+                            const rows = csvContent.split('\n').filter(row => row.trim() !== '');
 
 
-                                this.limitItems = this.totalRows
+                            this.totalRows = rows.length - 1; // Exclude the header row
+                            this.limitItems = this.totalRows;
 
-                                // Show the back button and update currentStep
-                                this.currentStep = 2;
-                            })
-                            .catch(error => {
-                                console.error(error);
-                                // Handle errors if needed
-                            })
-                            .finally(() => {
-                                // Hide loading or processing indicator if needed
+                            this.csvData = rows.slice(1).map(row => {
+                                const values = row.split(',');
+                                return Object.fromEntries(values.map((value, i) => [values[0].trim(), value.trim()]));
                             });
+
+                            console.log()
+
+                            this.currentStep = 2; // Move to the next step
+                        };
+                        reader.readAsText(fileInput.files[0]);
                     } else {
-                        // Handle case where no file is selected
                         console.error('No file selected.');
                     }
                 },
-                startImport: function () {
-                    // Implement the import logic based on the limitItems
-                    // Update importStatus and logs as individual items are updated
-
-                    // Placeholder for post update logic
-                    // Replace this with your actual logic for updating a post by ID
-                    const updatePostById = (id) => {
-                        // Your update logic here
-                        // Example: Use wp_update_post or any custom update function
-                    };
-
-                    for (let id = 1; id <= this.limitItems; id++) {
-                        // Log processing of each item
-                        this.logs.push({ id: id, message: `Processing {id, name}` });
-
-                        // Placeholder for post update logic
-                        // Replace this with your actual logic for updating a post by ID
-                        // For now, simulate a successful update if the ID is even, otherwise, simulate post not found
-                        if (id % 2 === 0) {
-                            this.logs.push({ id: id, message: 'Update successful' });
-                            // Uncomment and replace with your actual update logic
-                            // updatePostById(id);
-                        } else {
-                            this.logs.push({ id: id, message: 'Post not found' });
-                        }
-                    }
-
-                    // Update importStatus to Completed
-                    this.importStatus = 'Completed';
+                startImport() {
+                    jQuery.ajax({
+                        type: "POST",
+                        url: ajax.url,
+                        data: {
+                            nonce: ajax.nonce,
+                            action: 'start_csv_import',
+                            data: {
+                                limitItems: this.limitItems,
+                                csvData: this.csvData,
+                            },
+                        },
+                        success: function (response) {
+                            console.log(response)
+                            
+                            //Success
+                        },
+                        error: function (XMLHttpRequest, textStatus, errorThrown) {
+                            //Error
+                        },
+                        timeout: 60000
+                    });
                 },
-                submitForm: async function () {
+                submitForm() {
                     // Handle form submission if needed
                 },
-                backToUpload: function () {
-                    // Reset the form to step 1
+                backToUpload() {
                     this.currentStep = 1;
-
-                    // Clear any data related to the previous steps
                     this.totalRows = 0;
                     this.limitItems = 0;
                     this.importStatus = 'Idle';
                     this.logs = [];
+                    this.csvData = []
                 },
-            }
+            },
         });
+
+        csvImporterApp.mount('#csv-importer-app');
     </script>
     <?php
 }
 
-function csv_importer_menu()
+function add_admin_menu_page()
 {
     add_menu_page('CSV Importer', 'CSV Importer', 'manage_options', 'csv-importer', 'csv_importer_admin_page');
 }
 
-add_action('admin_menu', 'csv_importer_menu');
+add_action('admin_menu', 'add_admin_menu_page');
 
-function process_csv_file()
+function start_csv_import()
 {
-    check_admin_referer('csv_import_nonce', 'csv_import_nonce');
 
-    $csv_file = $_FILES['csv_file'];
-
-    if ($csv_file['error'] == 0)
+    if (!wp_verify_nonce($_POST['nonce'], 'csv_import_nonce'))
     {
-        $csv_data = file_get_contents($csv_file['tmp_name']);
-        $rows     = explode("\n", $csv_data);
-
-        $totalRows = count($rows);
-
-        wp_send_json_success(array(
-            'totalRows' => $totalRows
-        ));
+        die('Permission Denied.');
     }
 
-    // Handle errors or empty data
-    wp_send_json_error('Error processing CSV file.');
+    $data = $_POST['data'];
+
+
+    wp_send_json_success(array(
+        'data' => $data,
+    ));
+
+    wp_die();
 }
 
-add_action('wp_ajax_process_csv_file', 'process_csv_file');
+add_action('wp_ajax_start_csv_import', 'start_csv_import');
+add_action('wp_ajax_nopriv_start_csv_import', 'start_csv_import');
