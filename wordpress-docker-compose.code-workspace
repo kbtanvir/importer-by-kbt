@@ -1,11 +1,13 @@
 {
-	"folders": [
-		{
-			"path": "../../../.."
-		},
-		{
-			"path": "."
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "path": "../../../.."
+    },
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "liveServer.settings.multiRootWorkspaceName": "wordpress-docker-compose"
+  }
 }

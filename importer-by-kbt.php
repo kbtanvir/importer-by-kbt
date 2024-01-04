@@ -9,6 +9,7 @@ Author: K. B. Tanvir
 function add_scripts()
 {
     wp_enqueue_script('vue-js', 'https://cdn.jsdelivr.net/npm/vue@3.2.20', array(), '3.2.20', false);
+    wp_enqueue_script('papaparse', 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js', array(), '5.3.0', false);
 
     wp_localize_script('jquery', 'ajax', array(
         'url' => admin_url('admin-ajax.php'),
@@ -27,7 +28,8 @@ function csv_importer_admin_page()
         <form id="csv-import-form" @submit.prevent="submitForm">
             <?php wp_nonce_field('csv_import_nonce', 'csv_import_nonce'); ?>
 
-            <div v-if="currentStep === 1">
+            <div>
+                <!-- <div v-if="currentStep === 1"> -->
                 <input type="file" name="csv_file" accept=".csv" />
                 <button type="button" class="button-primary upload" @click="uploadFile">Upload</button>
             </div>
@@ -42,9 +44,9 @@ function csv_importer_admin_page()
         </form>
 
         <div id="status-update">
-            <p>Status: {{ importStatus }}</p>
+            <p>Status: <b style="background-color: yellow;">{{ status }}</b></p>
             <div id="log-container">
-                <b v-for="log in logs" :key="log.id">{{ log.message }}</b>
+                <p v-for="log in logs" :key="log.id">{{ log.message }}</p>
             </div>
         </div>
     </div>
@@ -58,7 +60,7 @@ function csv_importer_admin_page()
                 return {
                     currentStep: 1,
                     totalRows: 0,
-                    importStatus: 'Idle',
+                    status: 'Idle',
                     logs: [],
                     limitItems: 0,
                     csvData: []
@@ -72,24 +74,25 @@ function csv_importer_admin_page()
                         const reader = new FileReader();
                         reader.onload = (e) => {
                             const csvContent = e.target.result;
-                            const rows = csvContent.split('\n').filter(row => row.trim() !== '');
-
-
-                            this.totalRows = rows.length - 1; // Exclude the header row
-                            this.limitItems = this.totalRows;
-
-                            this.csvData = rows.slice(1).map(row => {
-                                const values = row.split(',');
-                                return Object.fromEntries(values.map((value, i) => [values[0].trim(), value.trim()]));
+                            Papa.parse(csvContent, {
+                                header: true,
+                                skipEmptyLines: true,
+                                dynamicTyping: true,
+                                complete: results => {
+                                    this.csvData = results.data;
+                                    this.totalRows = this.csvData.length;
+                                    this.limitItems = this.totalRows;
+                                    this.currentStep = 2;
+                                },
+                                error: error => {
+                                    this.status = error.message
+                                },
                             });
 
-                            console.log()
-
-                            this.currentStep = 2; // Move to the next step
                         };
                         reader.readAsText(fileInput.files[0]);
                     } else {
-                        console.error('No file selected.');
+                        this.status = "No file selected."
                     }
                 },
                 startImport() {
@@ -104,10 +107,12 @@ function csv_importer_admin_page()
                                 csvData: this.csvData,
                             },
                         },
-                        success: function (response) {
-                            console.log(response)
-                            
-                            //Success
+                        success: (response) => {
+                            console.log(response.data);
+                            this.logs = response.data.logs
+                            this.status = response.data.status || 'success';
+
+                            // Success
                         },
                         error: function (XMLHttpRequest, textStatus, errorThrown) {
                             //Error
@@ -122,7 +127,7 @@ function csv_importer_admin_page()
                     this.currentStep = 1;
                     this.totalRows = 0;
                     this.limitItems = 0;
-                    this.importStatus = 'Idle';
+                    this.status = 'Idle';
                     this.logs = [];
                     this.csvData = []
                 },
@@ -143,20 +148,48 @@ add_action('admin_menu', 'add_admin_menu_page');
 
 function start_csv_import()
 {
-
     if (!wp_verify_nonce($_POST['nonce'], 'csv_import_nonce'))
     {
         die('Permission Denied.');
     }
 
-    $data = $_POST['data'];
+    $data       = $_POST['data']['csvData'];
+    $limitItems = $_POST['data']['limitItems'];
 
+    $logs = array();
 
+    foreach ($data as $row)
+    {
+        // Assuming 'id' is a column in your CSV and 'uid' is the custom field in your posts
+        
+        $csvId   = $row['id'];
+        $csvName = $row['name'];
+        $post    = get_posts(array(
+            'meta_key' => 'uid',
+            'meta_value' => $csvId,
+            'post_type' => 'case27_listing_type', // Replace with your actual post type
+            'post_status' => 'any',
+            'numberposts' => 1,
+        ));
+
+        if ($post)
+        {
+            // Post found, update logic here
+            // Example: Use wp_update_post or any custom update function
+            $logs[] = array('id' => $csvId, 'message' => "$csvId : $csvName is being updated");
+        }
+        else
+        {
+            // Post not found, log and handle accordingly
+            $logs[] = array('id' => $csvId, 'message' => "$csvId : $csvName - post not found");
+        }
+    }
+    // Send logs and status as a JSON response
     wp_send_json_success(array(
-        'data' => $data,
+        'logs' => $logs,
+        'status' => 'Success', // Update with your actual status logic
     ));
 
-    wp_die();
 }
 
 add_action('wp_ajax_start_csv_import', 'start_csv_import');

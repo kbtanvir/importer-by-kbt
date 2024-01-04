@@ -1,0 +1,122 @@
+<script src="https://cdn.jsdelivr.net/npm/vue@3.2.20"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+<div class="wrap" id="csv-importer-app">
+  <h2>Importer by KBT - MultiStep Form</h2>
+
+  <form id="csv-import-form" @submit.prevent="submitForm">
+    <?php wp_nonce_field('csv_import_nonce', 'csv_import_nonce'); ?>
+
+    <div v-if="currentStep === 1">
+      <input type="file" name="csv_file" accept=".csv" />
+      <button type="button" class="button-primary upload" @click="uploadFile">
+        Upload
+      </button>
+    </div>
+
+    <div v-if="currentStep === 2">
+      <p>Total Rows in CSV: {{ totalRows }}</p>
+      <label>Limit Number of Items to Upload:</label>
+      <input type="number" v-model="limitItems" :max="totalRows" />
+      <button type="button" class="button-primary" @click="startImport">
+        Import
+      </button>
+      <button type="button" @click="backToUpload">Back</button>
+    </div>
+  </form>
+
+  <div id="status-update">
+    <p>Status: {{ importStatus }}</p>
+    <div id="log-container">
+      <b v-for="log in logs" :key="log.id">{{ log.message }}</b>
+    </div>
+  </div>
+</div>
+
+<script>
+  const { createApp, ref } = Vue;
+
+  const csvImporterApp = createApp({
+    data() {
+      return {
+        currentStep: 1,
+        totalRows: 0,
+        importStatus: "Idle",
+        logs: [],
+        limitItems: 0,
+        csvData: [],
+      };
+    },
+    methods: {
+      uploadFile() {
+        const fileInput = document.querySelector('input[name="csv_file"]');
+
+        if (fileInput.files.length > 0) {
+          const reader = new FileReader();
+          reader.onload = e => {
+            const csvContent = e.target.result;
+
+            Papa.parse(csvContent, {
+              header: true,
+              skipEmptyLines: true,
+              dynamicTyping: true,
+              complete: results => {
+                this.csvData = results.data;
+                this.totalRows = this.csvData.length;
+                this.limitItems = this.totalRows;
+
+                console.log(this.csvData);
+                this.currentStep = 2; // Move to the next step
+              },
+              error: error => {
+                console.error("Error parsing CSV:", error.message);
+              },
+            });
+
+            // this.currentStep = 2; // Move to the next step
+          };
+          reader.readAsText(fileInput.files[0]);
+        } else {
+          console.error("No file selected.");
+        }
+      },
+      startImport() {
+        jQuery.ajax({
+          type: "POST",
+          url: "http://127.0.0.1/wp-admin/admin-ajax.php",
+          data: {
+            <!-- nonce: ajax.nonce, -->
+            action: "start_csv_import",
+            data: {
+              limitItems: this.limitItems,
+              csvData: this.csvData,
+            },
+          },
+          success: function (response) {
+            console.log(response);
+
+            //Success
+          },
+          error: function (XMLHttpRequest, textStatus, errorThrown) {
+            //Error
+          },
+          timeout: 60000,
+        });
+      },
+      submitForm() {
+        // Handle form submission if needed
+      },
+      backToUpload() {
+        this.currentStep = 1;
+        this.totalRows = 0;
+        this.limitItems = 0;
+        this.importStatus = "Idle";
+        this.logs = [];
+        this.csvData = [];
+      },
+    },
+  });
+
+  csvImporterApp.mount("#csv-importer-app");
+</script>
