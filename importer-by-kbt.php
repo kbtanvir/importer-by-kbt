@@ -46,7 +46,7 @@ function csv_importer_admin_page()
         <div id="status-update">
             <p>Status: <b style="background-color: yellow;">{{ status }}</b></p>
             <div id="log-container">
-                <p v-for="log in logs" :key="log.id">{{ log.message }}</p>
+                <p v-for="log in logs" :key="log.id"> {{ log.message }}</p>
             </div>
         </div>
     </div>
@@ -96,28 +96,29 @@ function csv_importer_admin_page()
                     }
                 },
                 startImport() {
-                    jQuery.ajax({
-                        type: "POST",
-                        url: ajax.url,
-                        data: {
-                            nonce: ajax.nonce,
-                            action: 'start_csv_import',
+                    this.csvData.forEach((row, index) => {
+                        // Send AJAX request for each row
+                        jQuery.ajax({
+                            type: "POST",
+                            url: ajax.url,
                             data: {
-                                limitItems: this.limitItems,
-                                csvData: this.csvData,
+                                nonce: ajax.nonce,
+                                action: 'start_csv_import',
+                                data: {
+                                    csvRow: row,
+                                },
                             },
-                        },
-                        success: (response) => {
-                            console.log(response.data);
-                            this.logs = response.data.logs
-                            this.status = response.data.status || 'success';
-
-                            // Success
-                        },
-                        error: function (XMLHttpRequest, textStatus, errorThrown) {
-                            //Error
-                        },
-                        timeout: 60000
+                            success: (response) => {
+                                const log = response.data.log;
+                                // Update logs in real-time
+                                this.logs.push(log);
+                                this.status = response.status || 'success';
+                            },
+                            error: (XMLHttpRequest, textStatus, errorThrown) => {
+                                // Handle errors
+                            },
+                            timeout: 60000
+                        });
                     });
                 },
                 submitForm() {
@@ -153,43 +154,32 @@ function start_csv_import()
         die('Permission Denied.');
     }
 
-    $data       = $_POST['data']['csvData'];
-    $limitItems = $_POST['data']['limitItems'];
+    $csvRow  = $_POST['data']['csvRow'];
+    $csvId   = $csvRow['id'];
+    $csvName = $csvRow['name'];
 
-    $logs = array();
-
-    foreach ($data as $row)
-    {
-        // Assuming 'id' is a column in your CSV and 'uid' is the custom field in your posts
-        
-        $csvId   = $row['id'];
-        $csvName = $row['name'];
-        $post    = get_posts(array(
-            'meta_key' => 'uid',
-            'meta_value' => $csvId,
-            'post_type' => 'case27_listing_type', // Replace with your actual post type
-            'post_status' => 'any',
-            'numberposts' => 1,
-        ));
-
-        if ($post)
-        {
-            // Post found, update logic here
-            // Example: Use wp_update_post or any custom update function
-            $logs[] = array('id' => $csvId, 'message' => "$csvId : $csvName is being updated");
-        }
-        else
-        {
-            // Post not found, log and handle accordingly
-            $logs[] = array('id' => $csvId, 'message' => "$csvId : $csvName - post not found");
-        }
-    }
-    // Send logs and status as a JSON response
-    wp_send_json_success(array(
-        'logs' => $logs,
-        'status' => 'Success', // Update with your actual status logic
+    $post = get_posts(array(
+        'meta_key' => '_uid',
+        'meta_value' => $csvId,
+        'post_type' => 'job_listing',
+        'post_status' => 'any',
+        'numberposts' => 1,
     ));
 
+    if ($post)
+    {
+        // Post found, update logic here
+        // Example: Use wp_update_post or any custom update function
+        $log = array('id' => $csvId, 'message' => "CSV: $csvId - $csvName || WP: {$post[0]->ID} is being updated");
+    }
+    else
+    {
+        // Post not found, log and handle accordingly
+        $log = array('id' => $csvId, 'message' => "CSV: $csvId - $csvName || WP: post not found");
+    }
+
+    // Send log as a JSON response
+    wp_send_json_success(array('log' => $log));
 }
 
 add_action('wp_ajax_start_csv_import', 'start_csv_import');
