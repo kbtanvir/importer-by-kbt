@@ -10,6 +10,8 @@ function add_scripts()
 {
     wp_enqueue_script('vue-js', 'https://cdn.jsdelivr.net/npm/vue@3.2.20', array(), '3.2.20', false);
     wp_enqueue_script('papaparse', 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js', array(), '5.3.0', false);
+    wp_enqueue_script('csv-importer-script', plugin_dir_url(__FILE__) . 'js/main.js', array('jquery'), '1.0', true);
+    wp_enqueue_style('csv-importer-styles', plugin_dir_url(__FILE__) . 'css/main.css', array(), '1.0', 'all');
 
     wp_localize_script('jquery', 'ajax', array(
         'url' => admin_url('admin-ajax.php'),
@@ -21,131 +23,7 @@ add_action('admin_enqueue_scripts', 'add_scripts');
 
 function csv_importer_admin_page()
 {
-    ?>
-    <div class="wrap" id="csv-importer-app">
-        <h2>Importer by KBT - MultiStep Form</h2>
-
-        <form id="csv-import-form" @submit.prevent="submitForm">
-            <?php wp_nonce_field('csv_import_nonce', 'csv_import_nonce'); ?>
-
-            <div>
-                <!-- <div v-if="currentStep === 1"> -->
-                <input type="file" name="csv_file" accept=".csv" />
-                <button type="button" class="button-primary upload" @click="uploadFile">Upload</button>
-            </div>
-
-            <div v-if="currentStep === 2 && status ==='idle'">
-
-                <p>Total Rows in CSV: {{ totalRows }}</p>
-                <label>Limit Number of Items to Upload:</label>
-                <input type="number" v-model="limitItems" :max="totalRows" />
-                <button type="button" class="button-primary" @click="startImport">Import</button>
-                <button type="button" @click="backToUpload">Back</button>
-            </div>
-        </form>
-
-        <div id="status-update">
-            <p>Status: <b style="background-color: yellow;">{{ status }}</b></p>
-            <div id="log-container">
-                <p v-for="log in logs" :key="log.id"> {{ log.message }}</p>
-            </div>
-        </div>
-    </div>
-
-
-    <script>
-        const { createApp, ref } = Vue;
-
-        const csvImporterApp = createApp({
-            data() {
-                return {
-                    currentStep: 1,
-                    totalRows: 0,
-                    status: 'idle',
-                    logs: [],
-                    limitItems: 0,
-                    csvData: []
-                };
-            },
-            methods: {
-                uploadFile() {
-                    this.status = 'idle'
-                    const fileInput = document.querySelector('input[name="csv_file"]');
-                    if (fileInput.files.length > 0) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const csvContent = e.target.result;
-                            Papa.parse(csvContent, {
-                                header: true,
-                                skipEmptyLines: true,
-                                dynamicTyping: true,
-                                complete: results => {
-                                    this.csvData = results.data;
-                                    this.totalRows = this.csvData.length;
-                                    this.limitItems = this.totalRows;
-                                    this.currentStep = 2;
-                                },
-                                error: error => {
-                                    this.status = error.message
-                                },
-                            });
-
-                        };
-                        reader.readAsText(fileInput.files[0]);
-                    } else {
-                        this.status = "No file selected."
-                    }
-                },
-                startImport() {
-                    this.logs = []
-                    this.status = 'processing'
-                    this.csvData.forEach((row, index) => {
-                        // Send AJAX request for each row
-                        jQuery.ajax({
-                            type: "POST",
-                            url: ajax.url,
-                            data: {
-                                nonce: ajax.nonce,
-                                action: 'start_csv_import',
-                                data: {
-                                    csvRow: row,
-                                },
-                            },
-                            success: (response) => {
-                                const log = response.data.log;
-                                // Update logs in real-time
-                                this.logs.push(log);
-                                this.status = response.status || 'success';
-                            },
-                            error: (XMLHttpRequest, textStatus, errorThrown) => {
-                                // Handle errors
-                            },
-                            timeout: 60000
-                        });
-
-                    });
-
-
-
-
-                },
-                submitForm() {
-                    // Handle form submission if needed
-                },
-                backToUpload() {
-                    this.currentStep = 1;
-                    this.totalRows = 0;
-                    this.limitItems = 0;
-                    this.status = 'idle';
-                    this.logs = [];
-                    this.csvData = []
-                },
-            },
-        });
-
-        csvImporterApp.mount('#csv-importer-app');
-    </script>
-    <?php
+    include_once(plugin_dir_path(__FILE__) . 'templates/home.php');
 }
 
 function add_admin_menu_page()
@@ -168,7 +46,7 @@ function start_csv_import()
     $image_url = $csv_row['image_url'];
 
     $post = get_posts(array(
-        'meta_key' => '_uid',
+        'meta_key' => '_id',
         'meta_value' => $csv_id,
         'post_type' => 'job_listing',
         'post_status' => 'any',
@@ -180,7 +58,7 @@ function start_csv_import()
         $wp_post_id = $post[0]->ID;
 
         // Show processing message, logging part needs modification
-        $log = array('id' => $csv_id, 'message' => "CSV: $csv_id - $csv_name || WP: {$wp_post_id} \n");
+        $log = array('id' => $csv_id, 'message' => "CSV: $csv_id - $csv_name ♦️ WP: {$wp_post_id} \n");
 
         // Call function to process images
         $image_upload_res = process_image($image_url, $csv_id);
@@ -194,11 +72,11 @@ function start_csv_import()
 
             update_post_meta($wp_post_id, '_job_cover', $attachment_url);
 
-            $log['message'] .= ' || Featured image updated';
+            $log['message'] .= ' ♦️ Featured image updated';
         }
         else
         {
-            $log['message'] .= " || {$image_upload_res['message']}";
+            $log['message'] .= " ♦️ {$image_upload_res['message']}";
         }
 
         // Show update or failed message
@@ -208,7 +86,7 @@ function start_csv_import()
     else
     {
         // Post not found, log and handle accordingly
-        $log = array('id' => $csv_id, 'message' => "CSV: $csv_id - $csv_name || WP: post not found");
+        $log = array('id' => $csv_id, 'message' => "CSV: $csv_id - $csv_name ♦️ WP: post not found");
 
         // Send log as a JSON response
         wp_send_json_success(array('log' => $log));
@@ -261,7 +139,7 @@ function process_image($image_url, $csv_id)
     // Cleanup downloaded image (optional)
 
     // Return image ID from the gallery along with log message
-    return array('attach_id' => $attachment_id, 'message' => 'Image uploaded successfully.');
+    return array('attach_id' => $attachment_id, 'message' => '♦️ Image uploaded successfully.');
 }
 
 // Helper function to check if an attachment with a specific title already exists
